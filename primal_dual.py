@@ -691,6 +691,7 @@ obj_coefs[2*edge_cnt:] = 1
 
 z_init_path = "problem_set/{}/{}/z_init.npy".format(dataset, sample_dir)
 if os.path.exists(z_init_path):
+    print("Using cached z init.")
     z_init = np.load(z_init_path)
 else:
     print("Presolve_dual start.")
@@ -743,6 +744,7 @@ def presolve_primal():
 
 obj_gt_path = "problem_set/{}/{}/obj_gt.npy".format(dataset, sample_dir)
 if os.path.exists(obj_gt_path):
+    print("Using cached optimal value.")
     obj_gt = np.load(obj_gt_path)
 else:
     gurobi_start_time = time.time()
@@ -796,16 +798,12 @@ def test0(rho, beta,alpha,iter_num):
         else:
             coef_sum = 1/np.sqrt(iter_num)
         for i in range(1):
-            #alpha =  0.8 * alpha
             topk_start_time = time.time()
             objVal, y_opt, subgrad = topk_y(x_t, y_init)
             print("subgradient time: {}".format(time.time() - topk_start_time))
             g_t = subgrad
             grad_sum = g_t
-
             x_t = x_t + (coef_sum * alpha * grad_sum + gamma_t_sum + s_t_sum) / beta
-
-            #print(x_t)
         x_list = [x_t]        
         # s update
         projection_start_time = time.time()
@@ -845,37 +843,21 @@ def test0(rho, beta,alpha,iter_num):
             #s_t = []
             s_t_sum = 0
             for index, is_neq in zip(indices, is_neqs):
-                #s_t.append(hp_proj(x_t - gamma_t[index]/rho, dual_constr_coefs[index],
-                #                        dual_constr_rhs[index], is_neq))
-
                 if is_neq:
-                    #s_t[index+dual_n_eq_constrs] = hp_proj(x_t - gamma_t[index + dual_n_eq_constrs]/rho, dual_neq_constr_coefs[index],
-                    #                    dual_neq_constr_rhs[index], is_neq = True)
                     gamma_t_array = np.frombuffer(gamma_t[index + dual_n_eq_constrs], dtype=ctypes.c_float)
                     s_t_i = hp_proj(x_t - gamma_t_array/rho, dual_neq_constr_coefs[index],
                                         dual_neq_constr_rhs[index], is_neq = True)
-                    #s_t_i = hp_proj(x_t, dual_neq_constr_coefs[index],
-                    #                    dual_neq_constr_rhs[index], is_neq = True)
                     s_t_x_t = rho * (s_t_i - x_t)
                     s_t_sum += s_t_x_t
-                    #gamma_t[index+dual_n_eq_constrs] += s_t_x_t
-                    #gamma_t_array += s_t_x_t
                     gamma_t_array.__iadd__(s_t_x_t)
                 else:
-                    #s_t[index] = hp_proj(x_t - gamma_t[index]/rho, dual_eq_constr_coefs[index],
-                    #                    dual_eq_constr_rhs[index], is_neq = False)
                     gamma_t_array = np.frombuffer(gamma_t[index], dtype=ctypes.c_float)
                     s_t_i = hp_proj(x_t - gamma_t_array/rho, dual_eq_constr_coefs[index],
                                         dual_eq_constr_rhs[index], is_neq = False)
-                    #s_t_i = hp_proj(x_t, dual_eq_constr_coefs[index],
-                    #                    dual_eq_constr_rhs[index], is_neq = False)
                     s_t_x_t = rho * (s_t_i - x_t) 
                     s_t_sum += s_t_x_t
-                    #gamma_t_array += s_t_x_t
                     gamma_t_array.__iadd__(s_t_x_t)
                 
-            #ret = np.stack(s_t, axis = 0)
-            #ret = 0
             ret = s_t_sum
             #print(s_t[0])
             #print("sub process time: {}".format(time.time()-sub_process_start_time))
@@ -888,22 +870,14 @@ def test0(rho, beta,alpha,iter_num):
         arg_2 = np.concatenate((np.zeros(dual_n_eq_constrs, dtype=np.int32), np.ones(dual_n_neq_constrs, dtype=np.int32)), axis=0)
         arg_2 = np.array_split(arg_2, num_processes)
         print(dual_n_eq_constrs, dual_n_neq_constrs)
-        #arg_1 = np.array_split(np.arange(dual_n_eq_constrs), 1)
-        #dual_n_eq_constrs, dual_n_eq_constrs + 
-        #arg_1.append(np.arange(dual_n_neq_constrs))
-        #arg_2 = np.array_split(np.zeros(dual_n_eq_constrs, dtype=np.int32), 1)
-        #arg_2.append(np.ones(dual_n_neq_constrs, dtype=np.int32))
         arg_3 = np.ones(num_processes) * time.time()
         s_t_args = zip(arg_1, arg_2, arg_3)
         pool = multiprocessing.Pool(processes=num_processes)
-        #s_t, times = pool.map(hp_proj_multi, s_t_args)
         ret = pool.map(hp_proj_multi, s_t_args)
         #s_t = [v[0] for v in ret]
         times = [v[1] for v in ret]
         subprocess_end_time = time.time()
         print("return time: {}".format(subprocess_end_time - times[-1]))
-        #print(np.sum(s_t!=0))
-        #s_t = np.concatenate(s_t, axis = 0)
         s_t_sum = np.sum([v[0] for v in ret], axis = 0)
         #print("concat time: {}".format(time.time() - subprocess_end_time))
         pool.close()
@@ -935,22 +909,12 @@ def test0(rho, beta,alpha,iter_num):
         gamma_t_sum += s_t_sum
         #gamma_list = [gamma_t]
         print("projection time: {}".format(time.time() - projection_start_time))
-        gamma_t_arr = np.frombuffer(gamma_t[122], dtype=ctypes.c_float)
-        #print(gamma_t_arr[np.where(gamma_t_arr != 0)[0]])
         #s_list.append(s_t)
-        ag_sum_0 = 0
-        ag_sum_1 = 0
         calc_violation_start = time.time()
-        """
-        for j in range(len(s_t)):
-            ag_sum_0 += gamma_t[j] @ (s_t[j] - x_t)
-            #ag_sum_1 += (project_x[j] - x_t)@ (project_x[j] - x_t)
-        """
         print(dual_neq_constr_coefs.shape)
         print(x_t.shape)
         ag_sum_1 = np.linalg.norm((dual_neq_constr_coefs @ x_t > dual_neq_constr_rhs) * (dual_neq_constr_coefs @ x_t - dual_neq_constr_rhs)) ** 2 +\
                     np.linalg.norm(dual_eq_constr_coefs @ x_t - dual_eq_constr_rhs) ** 2
-        #print("ObjVal:{} AG:{} {} f:{}".format(-objVal, ag_sum_0, ag_sum_1, -objVal+ag_sum_0+ag_sum_1))
         print("ObjVal:{} CV:{}".format(-objVal, ag_sum_1))
         objVal_list.append(-objVal)
         constr_list.append(ag_sum_1)
@@ -970,10 +934,6 @@ def test0(rho, beta,alpha,iter_num):
         #gamma_list.append(gamma_t)
         gamma_list = [gamma_t]
         """
-        #pool.close()
-        #if 
-        #x_t, vlt = dykstra(x_t, dual_neq_constr_coefs, dual_neq_constr_rhs, dual_eq_constr_coefs, dual_eq_constr_rhs)
-        #coef_sum -= 1/it
         time_list.append(time.time() - start_time)
         np.save("results/{}/{}/".format(dataset, sample_dir) +\
                  "{}_rho{}_beta_{}_alpha_{}_iter_{}_obj.npy".format(file_name, rho, beta, alpha,iter_num), np.array(objVal_list))
@@ -995,7 +955,7 @@ def test0(rho, beta,alpha,iter_num):
     plt.title("min:{:.6f} last:{:.6f}".format(np.min(constr_list), constr_list[-1]))
     plt.savefig("results/{}/{}/".format(dataset, sample_dir) +\
                  "{}_rho{}_beta_{}_alpha_{}_iter_{}_2.png".format(file_name, rho, beta, alpha, iter_num))
-    
+    """"
     with open("results/{}/{}/spotlight.txt".format(dataset, sample_dir), "a") as txt_file:
         txt_file.write("rho{}_beta_{}_alpha_{}_iter_{}\n".format(rho, beta, alpha, iter_num))
         best_obj = -10
@@ -1009,10 +969,7 @@ def test0(rho, beta,alpha,iter_num):
             elif constr_list[i] < best_vlt:
                 best_vlt = constr_list[i]
                 txt_file.write("Iter: {} Objval: {} Violation: {}\n".format(i, objVal_list[i], constr_list[i]))
-
-                
-
-    #np.save(file_name + "_dual_opt.npy", gamma_list[-1])
+    """
     return x_list, objVal_list, y_opt, z_list, constr_list
 
 #_, objVal_list_1, _, _, _, _, constr_list_1 = test0()

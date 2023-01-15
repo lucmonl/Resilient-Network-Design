@@ -14,3 +14,6 @@ network/
     USairport_2010_34/
     USairport_2010_66/
     generate_synthetic.py: generating synthetic datasets (power law and skewed).
+
+Usage Example:
+python primal_dual.py --dataset USairport_2010_66 --perturb_num 12 --budget 4 --rho 1 --alpha 50 --beta 100 --iter_num 3000
