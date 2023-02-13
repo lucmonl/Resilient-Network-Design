@@ -170,7 +170,10 @@ def get_eq_constrs(n):
         for col in edge_dict[row]:
             eq_constr_coefs_row.append(constr_id)
             eq_constr_coefs_col.append(edge_var[(row,col)])
-            eq_constr_coefs_data.append(row < col)
+            if(row<col):
+                eq_constr_coefs_data.append(1)
+            else:
+                eq_constr_coefs_data.append(-1)
 
         eq_constr_coefs_row.append(constr_id)
         eq_constr_coefs_col.append(2*edge_cnt+2*row)
